@@ -1,4 +1,4 @@
-package com.rockthejvm.part1streams;
+package com.rockthejvm.course;
 
 import com.rockthejvm.gaming.*;
 import org.apache.flink.api.common.eventtime.SerializableTimestampAssigner;

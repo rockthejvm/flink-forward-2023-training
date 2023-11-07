@@ -1,7 +1,5 @@
-package com.rockthejvm.part1streams;
+package com.rockthejvm.course;
 
-import com.rockthejvm.gaming.PlayerRegistered;
-import com.rockthejvm.gaming.ServerEvent;
 import com.rockthejvm.shopping.*;
 import org.apache.flink.api.common.eventtime.*;
 import org.apache.flink.streaming.api.datastream.AllWindowedStream;
