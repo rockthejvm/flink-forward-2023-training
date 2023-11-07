@@ -2,8 +2,10 @@ package com.rockthejvm.course;
 
 import com.rockthejvm.shopping.ShoppingCartEvent;
 import com.rockthejvm.shopping.ShoppingCartEventsGenerator;
-import com.rockthejvm.shopping.SingleShoppingCartEventsGenerator;
 import org.apache.flink.api.common.state.*;
+import org.apache.flink.api.common.typeinfo.TypeHint;
+import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream.KeyedStream;
@@ -164,11 +166,131 @@ public class KeyedState {
    * For every user, for every event type,
    *  store the last 5 events, print them out as reports.
    */
+  static void exercise() throws Exception {
+    shoppingCartEvents
+      .keyBy(e -> e.getUserId() + "-" + e.getClass().getSimpleName())
+      .process(
+        new KeyedProcessFunction<String, ShoppingCartEvent, String>() {
+          ListState<ShoppingCartEvent> stateEventsPerCombo;
+
+          @Override
+          public void open(Configuration parameters) throws Exception {
+            stateEventsPerCombo = getRuntimeContext()
+              .getListState(new ListStateDescriptor<>("events-for-pair", ShoppingCartEvent.class));
+          }
+
+          @Override
+          public void close() throws Exception {
+            stateEventsPerCombo.clear();
+          }
+
+          @Override
+          public void processElement(ShoppingCartEvent event, KeyedProcessFunction<String, ShoppingCartEvent, String>.Context ctx, Collector<String> out) throws Exception {
+            Iterable<ShoppingCartEvent> events = stateEventsPerCombo.get();
+            List<ShoppingCartEvent> eventList = new ArrayList<>();
+            events.forEach(e -> eventList.add(e));
+
+            if (eventList.size() >= 5)
+              eventList.remove(0);
+
+            eventList.add(event);
+            stateEventsPerCombo.update(eventList);
+
+            StringBuilder report = new StringBuilder(
+              event.getUserId() + "-" + event.getClass().getSimpleName() + "- [");
+
+            for (ShoppingCartEvent e: eventList)
+              report.append(e.toString()).append(",");
+            report.append("]");
+
+            out.collect("User " + event.getUserId() + " - " + report);
+          }
+        }
+      ).print();
+
+    env.execute();
+  }
+
+  private static void demoLast5EventsPerUser() throws Exception {
+    eventsPerUser
+      .keyBy((KeySelector<ShoppingCartEvent, String>) value -> value.getClass().getSimpleName()).process(new ProcessFunction<ShoppingCartEvent, String>() {
+
+        ListState<String> last5;
+
+        @Override
+        public void open(Configuration parameters) throws Exception {
+          last5 = getRuntimeContext().getListState(new ListStateDescriptor<>("last-5", String.class));
+        }
+
+        @Override
+        public void close() throws Exception {
+          last5.clear();
+        }
+
+        @Override
+        public void processElement(ShoppingCartEvent value, ProcessFunction<ShoppingCartEvent, String>.Context ctx, Collector<String> out) throws Exception {
+          List<String> last5V = new ArrayList<>((Collection) last5.get());
+          if (last5V.size() == 5) {
+            last5V.remove(0);
+          }
+          last5V.add(value.toString());
+          last5.update(last5V);
+          out.collect(value.getUserId() + ":" + value.getClass().getSimpleName() + ":" + last5V.toString());
+        }
+      }).print();
+
+    env.execute();
+  }
+
+
+  public static DataStream<String> exerciseMapState(DataStream<ShoppingCartEvent> stream) {
+    return stream.keyBy(ShoppingCartEvent::getUserId).process(
+      new KeyedProcessFunction<>() {
+        MapState<String, List<ShoppingCartEvent>> eventMap = null;
+
+        @Override
+        public void open(Configuration parameters) {
+
+          eventMap = getRuntimeContext().getMapState(new MapStateDescriptor<>(
+            "eventMap",
+            TypeInformation.of(String.class),
+            TypeInformation.of(new TypeHint<>() {
+            })));
+        }
+
+        @Override
+        public void close() throws Exception {
+          eventMap.clear();
+        }
+
+        @Override
+        public void processElement(
+          ShoppingCartEvent value,
+          KeyedProcessFunction<String, ShoppingCartEvent, String>.Context ctx,
+          Collector<String> out
+        ) throws Exception {
+
+          List<ShoppingCartEvent> current = eventMap.get(value.getClass().getSimpleName());
+          if (current == null) {
+            current = new LinkedList<>();
+          }
+          if (current.size() == 5) {
+            current.remove(0);
+          }
+          current.add(value);
+          eventMap.put(value.getClass().getSimpleName(), current);
+          out.collect(String.format("%s {Add -> %s, Remove -> %s}",
+            ctx.getCurrentKey(),
+            eventMap.get("AddToShoppingCartEvent"),
+            eventMap.get("RemovedFromShoppingCartEvent")
+          ));
+        }
+      });
+  }
+
 
   public static void main(String[] args) throws Exception {
-    demoValueState();
+    exerciseMapState(shoppingCartEvents).print();
+    env.execute();
   }
 }
-
-
-// TODO fix value state
