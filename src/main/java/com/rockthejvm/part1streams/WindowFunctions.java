@@ -5,6 +5,7 @@ import org.apache.flink.api.common.eventtime.SerializableTimestampAssigner;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
 import org.apache.flink.api.common.functions.AggregateFunction;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
+import org.apache.flink.api.java.tuple.Tuple2;
 import org.apache.flink.streaming.api.datastream.AllWindowedStream;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream.KeyedStream;
@@ -25,6 +26,7 @@ import org.apache.flink.util.Collector;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Iterator;
 import java.util.List;
 import java.util.UUID;
 
@@ -51,10 +53,15 @@ public class WindowFunctions {
     fred.register(serverStartTime, Duration.ofSeconds(6)),
     bob.offline(serverStartTime, Duration.ofSeconds(6)),
     fred.online(serverStartTime, Duration.ofSeconds(6)),
+    diana.offline(serverStartTime, Duration.ofSeconds(7)),
     charlie.register(serverStartTime, Duration.ofSeconds(8)),
+    fred.offline(serverStartTime, Duration.ofSeconds(9)),
     alice.online(serverStartTime, Duration.ofSeconds(10)),
     emily.online(serverStartTime, Duration.ofSeconds(10)),
-    charlie.online(serverStartTime, Duration.ofSeconds(10))
+    charlie.online(serverStartTime, Duration.ofSeconds(10)),
+    emily.offline(serverStartTime, Duration.ofSeconds(11)),
+    charlie.offline(serverStartTime, Duration.ofSeconds(12)),
+    alice.offline(serverStartTime, Duration.ofSeconds(12))
   );
 
   // how many players were REGISTERED every 3 seconds?
@@ -271,15 +278,119 @@ public class WindowFunctions {
   }
 
   /**
+   * Exercise:
    * Add Player Offline events in your list.
    * 1. Retrieve the number of NET new players (online - offline)
    *  - every 2 seconds
    *  - every 2 seconds, updated every 1s
-   * 2. Find the window (sliding windows 2s, every 1s) that had THE MOST net registrations
+   * 2. Find the window (sliding windows 2s, every 1s)
+   *  that had THE MOST new players (online - offline)
    */
+
+  static void windowExercise() throws Exception {
+    AllWindowedStream<ServerEvent, TimeWindow> windowedEvents =
+      eventStream.windowAll(
+        TumblingEventTimeWindows.of(Time.seconds(2))
+      );
+
+    DataStream<String> reports = windowedEvents.apply(
+      new AllWindowFunction<ServerEvent, String, TimeWindow>() {
+        @Override
+        public void apply(TimeWindow window, Iterable<ServerEvent> values, Collector<String> out) throws Exception {
+          int nNewPlayers = 0;
+          for (ServerEvent e : values)
+            if (e instanceof PlayerOnline)
+              nNewPlayers += 1;
+            else if (e instanceof PlayerOffline)
+              nNewPlayers -= 1;
+
+          nNewPlayers = Math.max(nNewPlayers, 0); // TBD
+
+          out.collect(
+            "[" + window.getStart() + " - " + window.getEnd() + "] - " + nNewPlayers + " new players"
+          );
+        }
+      }
+    );
+
+    DataStream<Tuple2<Integer, TimeWindow>> countsWithWindow = windowedEvents.apply(
+      new AllWindowFunction<ServerEvent, Tuple2<Integer, TimeWindow>, TimeWindow>() {
+        @Override
+        public void apply(TimeWindow window, Iterable<ServerEvent> values, Collector<Tuple2<Integer, TimeWindow>> out) throws Exception {
+          int nNewPlayers = 0;
+          for (ServerEvent e : values)
+            if (e instanceof PlayerOnline)
+              nNewPlayers += 1;
+            else if (e instanceof PlayerOffline)
+              nNewPlayers -= 1;
+
+          nNewPlayers = Math.max(nNewPlayers, 0); // TBD
+
+          out.collect(
+            new Tuple2<>(nNewPlayers, window)
+          );
+        }
+      }
+    );
+
+    DataStream<Tuple2<Integer, TimeWindow>> bestTuples = countsWithWindow
+      .keyBy(tuple -> "the thing")
+      .reduce((tuple1, tuple2) -> {
+        if (tuple1.f0 > tuple2.f0)
+          return tuple1;
+        return tuple2;
+      });
+
+//    Iterator<Tuple2<Integer, TimeWindow>> tuples = bestTuples.executeAndCollect();
+//
+//    Tuple2<Integer, TimeWindow> bestTuple = null;
+//    while (tuples.hasNext())
+//      bestTuple = tuples.next();
+//
+//    if (bestTuple != null)
+//      System.out.println(
+//        "Best window is: " + bestTuple.f1.getStart() + " - " + bestTuple.f1.getEnd() + " - " + bestTuple.f0 + " new players"
+//      );
+    // Best window is: 1699228810000 - 1699228812000 - 2 new players
+
+
+    DataStream<String> reportsGlobal = countsWithWindow
+      .windowAll(GlobalWindows.create())
+      .trigger(CountTrigger.of(1))
+      .apply(
+        new AllWindowFunction<Tuple2<Integer, TimeWindow>, String, GlobalWindow>() {
+          @Override
+          public void apply(GlobalWindow window, Iterable<Tuple2<Integer, TimeWindow>> values, Collector<String> out) throws Exception {
+            Iterator<Tuple2<Integer, TimeWindow>> tuples = values.iterator();
+            Tuple2<Integer, TimeWindow> bestTuple = null;
+            while (tuples.hasNext()) {
+              Tuple2<Integer, TimeWindow> nextTuple = tuples.next();
+              if (bestTuple == null || nextTuple.f0 > bestTuple.f0)
+                bestTuple = nextTuple;
+            }
+
+
+            if (bestTuple != null)
+              out.collect(
+                "Best window SO FAR is: " + bestTuple.f1.getStart() + " - " + bestTuple.f1.getEnd() + " - " + bestTuple.f0 + " new players"
+              );
+          }
+        }
+      );
+
+    String lastReport = "no window yet";
+    Iterator<String> localReports = reportsGlobal.executeAndCollect();
+    while (localReports.hasNext())
+      lastReport = localReports.next();
+
+    System.out.println(lastReport);
+
+  }
+  // [1699228810000 - 1699228812000] - 2 new players
+
 
 
   public static void main(String[] args) throws Exception {
-    demoGlobalWindow();
+    windowExercise();
   }
 }
