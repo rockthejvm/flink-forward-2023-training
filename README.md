@@ -1,6 +1,6 @@
 # Flink Forward 2023 - Flink for Developers Training
 
-Powered by [Rock the JVM!](rockthejvm.com)
+Powered by [Rock the JVM!](https://rockthejvm.com/)
 
 This is the repository we'll use for the Apache Flink for Developers training at Flink Forward 2023.
 
