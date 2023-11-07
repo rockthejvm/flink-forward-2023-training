@@ -165,6 +165,47 @@ public class KeyedState {
    *  store the last 5 events, print them out as reports.
    */
 
+  public static DataStream<String> exercise(DataStream<ShoppingCartEvent> stream) {
+        return stream.keyBy(ShoppingCartEvent::getUserId).process(
+            new KeyedProcessFunction<>() {
+                MapState<String, List<ShoppingCartEvent>> eventMap = null;
+
+                @Override
+                public void open(Configuration parameters) {
+
+                    eventMap = getRuntimeContext().getMapState(new MapStateDescriptor<>(
+                        "eventMap",
+                        TypeInformation.of(String.class),
+                        TypeInformation.of(new TypeHint<>() {
+                        })));
+                }
+
+                @Override
+                public void processElement(
+                    ShoppingCartEvent value,
+                    KeyedProcessFunction<String, ShoppingCartEvent, String>.Context ctx,
+                    Collector<String> out
+                ) throws Exception {
+
+                    List<ShoppingCartEvent> current = eventMap.get(value.getClass().getSimpleName());
+                    if (current == null) {
+                        current = new LinkedList<>();
+                        current.add(value);
+                    }
+                    if (current.size() == 5) {
+                        current.remove(0);
+                    }
+                    current.add(value);
+                    eventMap.put(value.getClass().getSimpleName(), current);
+                    out.collect(String.format("%s {Add -> %s, Remove -> %s}", 
+                        ctx.getCurrentKey(),
+                        eventMap.get("AddToShoppingCartEvent"), 
+                        eventMap.get("RemovedFromShoppingCartEvent")
+                    ));
+                }
+            });
+    }
+
   public static void main(String[] args) throws Exception {
     demoValueState();
   }
