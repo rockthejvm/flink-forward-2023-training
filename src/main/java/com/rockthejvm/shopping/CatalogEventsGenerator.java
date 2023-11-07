@@ -1,15 +1,15 @@
 package com.rockthejvm.shopping;
 
+import org.apache.flink.types.SerializableOptional;
 import java.time.Instant;
-import java.util.Optional;
 import java.util.UUID;
 
 public class CatalogEventsGenerator extends EventGenerator<CatalogEvent> {
     private int sleepMillisBetweenEvents;
     private Instant baseInstant;
-    private Optional<Long> extraDelayInMillisOnEveryTenEvents;
+    private SerializableOptional<Long> extraDelayInMillisOnEveryTenEvents;
 
-    public CatalogEventsGenerator(int sleepMillisBetweenEvents, Instant baseInstant, Optional<Long> extraDelayInMillisOnEveryTenEvents) {
+    public CatalogEventsGenerator(int sleepMillisBetweenEvents, Instant baseInstant, SerializableOptional<Long> extraDelayInMillisOnEveryTenEvents) {
         super(
           sleepMillisBetweenEvents,
           id -> new ProductDetailsViewed(
