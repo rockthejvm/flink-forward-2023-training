@@ -58,11 +58,12 @@ public class KeyedState {
           public void open(Configuration parameters) throws Exception {
             stateCounter = getRuntimeContext()
               .getState(new ValueStateDescriptor<>("events-counter", Long.class));
-            stateCounter.update(0L);
           }
 
           @Override
           public void processElement(ShoppingCartEvent value, KeyedProcessFunction<String, ShoppingCartEvent, String>.Context ctx, Collector<String> out) throws Exception {
+            if (stateCounter.value() == null)
+              stateCounter.update(0L);
             Long nEventsForUser = stateCounter.value(); // accesses the Flink Value state
             stateCounter.update(nEventsForUser + 1);
             out.collect("User " + value.getUserId() + " - " + (nEventsForUser + 1));
@@ -159,9 +160,13 @@ public class KeyedState {
     env.execute();
   }
 
+  /**
+   * For every user, for every event type,
+   *  store the last 5 events, print them out as reports.
+   */
 
   public static void main(String[] args) throws Exception {
-    demoMapState();
+    demoValueState();
   }
 }
 
