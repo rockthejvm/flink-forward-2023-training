@@ -4,6 +4,7 @@ import com.rockthejvm.shopping.ShoppingCartEvent;
 import com.rockthejvm.shopping.ShoppingCartEventsGenerator;
 import com.rockthejvm.shopping.SingleShoppingCartEventsGenerator;
 import org.apache.flink.api.common.state.*;
+import org.apache.flink.api.java.functions.KeySelector;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream.KeyedStream;
@@ -170,32 +171,36 @@ public class KeyedState {
     }
 
     private static void demoLast5EventsPerUser() throws Exception {
-        eventsPerUser.process(new ProcessFunction<ShoppingCartEvent, String>() {
+        eventsPerUser
+                .keyBy((KeySelector<ShoppingCartEvent, String>) value -> value.getClass().getSimpleName()).process(new ProcessFunction<ShoppingCartEvent, String>() {
 
-            ListState<String> last5;
+                    ListState<String> last5;
 
-            @Override
-            public void open(Configuration parameters) throws Exception {
-                last5 = getRuntimeContext().getListState(new ListStateDescriptor<>("last-5", String.class));
-            }
+                    @Override
+                    public void open(Configuration parameters) throws Exception {
+                        last5 = getRuntimeContext().getListState(new ListStateDescriptor<>("last-5", String.class));
+                    }
 
-            @Override
-            public void close() throws Exception {
-                last5.clear();
-            }
+                    @Override
+                    public void close() throws Exception {
+                        last5.clear();
+                    }
 
-            @Override
-            public void processElement(ShoppingCartEvent value, ProcessFunction<ShoppingCartEvent, String>.Context ctx, Collector<String> out) throws Exception {
-                List<String> last5V = new ArrayList<>((Collection) last5.get());
-                if (last5V.size() == 5) {
-                    last5V.remove(0);
-                }
-                last5V.add(value.toString());
-                last5.update(last5V);
-                out.collect(value.getUserId() + ":" + last5V.toString());
-            }
-        }).print();
+                    @Override
+                    public void processElement(ShoppingCartEvent value, ProcessFunction<ShoppingCartEvent, String>.Context ctx, Collector<String> out) throws Exception {
+                        List<String> last5V = new ArrayList<>((Collection) last5.get());
+                        if (last5V.size() == 5) {
+                            last5V.remove(0);
+                        }
+                        last5V.add(value.toString());
+                        last5.update(last5V);
+                        out.collect(value.getUserId() + ":" + value.getClass().getSimpleName() + ":" + last5V.toString());
+                    }
+                }).print();
 
         env.execute();
     }
 }
+
+
+// TODO fix value state
