@@ -1,6 +1,11 @@
 package com.rockthejvm.course;
 
+import com.rockthejvm.shopping.AddToShoppingCartEvent;
+import com.rockthejvm.shopping.ShoppingCartEvent;
+import com.rockthejvm.shopping.ShoppingCartEventsGenerator;
+import org.apache.flink.api.common.functions.FlatMapFunction;
 import org.apache.flink.api.common.functions.MapFunction;
+import org.apache.flink.api.common.functions.RichFlatMapFunction;
 import org.apache.flink.api.common.functions.RichMapFunction;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.streaming.api.datastream.DataStream;
@@ -79,13 +84,100 @@ public class RichFunctions {
    * DataStream of shopping cart events
    * Explode the events into "itemized events"
    * [ ("iphone", 2), ("cable", 3) ] ->
-   * [ "iphone", "iphone", cable, cable, cable ]
+   * [ "iphone", "iphone", "cable", "cable", "cable" ]
    *
    * - use Java lambdas
    * - use ___Function
    * - use the rich version
    * - use a ProcessFunction
    */
+
+  static void exercise() throws Exception {
+    DataStream<ShoppingCartEvent> events =
+      env.addSource(
+        new ShoppingCartEventsGenerator(500, 10)
+      );
+
+    DataStream<ShoppingCartEvent> itemizedEvents =
+      events.flatMap((event, collector) -> {
+        if (event instanceof AddToShoppingCartEvent) {
+          AddToShoppingCartEvent atsce = (AddToShoppingCartEvent) event;
+          int quantity = atsce.getQuantity();
+          for (int i = 0; i < quantity; i++)
+            collector.collect(new AddToShoppingCartEvent(
+              atsce.getUserId(),
+              atsce.getSku(),
+              1,
+              atsce.getTime()
+            ));
+        }
+      });
+
+    DataStream<String> itemizedEvents_v2 =
+      events.flatMap(
+        new FlatMapFunction<ShoppingCartEvent, String>() {
+          @Override
+          public void flatMap(ShoppingCartEvent event, Collector<String> collector) throws Exception {
+            if (event instanceof AddToShoppingCartEvent) {
+              AddToShoppingCartEvent atsce = (AddToShoppingCartEvent) event;
+              int quantity = atsce.getQuantity();
+              for (int i = 0; i < quantity; i++)
+                collector.collect(atsce.getSku());
+            }
+          }
+        }
+      );
+
+    DataStream<String> itemizedEvents_v3 =
+      events.flatMap(
+        new RichFlatMapFunction<ShoppingCartEvent, String>() {
+          @Override
+          public void flatMap(ShoppingCartEvent event, Collector<String> collector) throws Exception {
+            if (event instanceof AddToShoppingCartEvent) {
+              AddToShoppingCartEvent atsce = (AddToShoppingCartEvent) event;
+              int quantity = atsce.getQuantity();
+              for (int i = 0; i < quantity; i++)
+                collector.collect(atsce.getSku());
+            }
+          }
+
+          @Override
+          public void open(Configuration parameters) throws Exception {
+            System.out.println("itemizing");
+          }
+
+          @Override
+          public void close() throws Exception {
+            System.out.println("itemizing done");
+          }
+        }
+      );
+
+    DataStream<String> itemizedEvents_v4 =
+      events.process(
+        new ProcessFunction<ShoppingCartEvent, String>() {
+          @Override
+          public void processElement(ShoppingCartEvent event, ProcessFunction<ShoppingCartEvent, String>.Context ctx, Collector<String> collector) throws Exception {
+            if (event instanceof AddToShoppingCartEvent) {
+              AddToShoppingCartEvent atsce = (AddToShoppingCartEvent) event;
+              int quantity = atsce.getQuantity();
+              for (int i = 0; i < quantity; i++)
+                collector.collect(atsce.getSku());
+            }
+          }
+
+          @Override
+          public void open(Configuration parameters) throws Exception {
+            System.out.println("itemizing");
+          }
+
+          @Override
+          public void close() throws Exception {
+            System.out.println("itemizing done");
+          }
+        }
+      );
+  }
 
   public static void main(String[] args) throws Exception {
     demoRichFunctions();
