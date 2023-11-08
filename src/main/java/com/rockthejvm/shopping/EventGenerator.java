@@ -2,19 +2,20 @@ package com.rockthejvm.shopping;
 
 import org.apache.flink.streaming.api.functions.source.RichParallelSourceFunction;
 import org.apache.flink.streaming.api.watermark.Watermark;
+import org.apache.flink.types.SerializableOptional;
+import org.apache.flink.util.function.SerializableFunction;
 
 import java.time.Instant;
-import java.util.Optional;
 import java.util.function.Function;
 
 public class EventGenerator<T> extends RichParallelSourceFunction<T> {
     private int sleepMillisBetweenEvents;
     private Instant baseInstant;
     private Function<Long, T> generator;
-    private Optional<Long> extraDelayInMillisOnEveryTenEvents;
+    private SerializableOptional<Long> extraDelayInMillisOnEveryTenEvents;
     private volatile boolean running = true;
 
-    public EventGenerator(int sleepMillisBetweenEvents, Function<Long, T> generator, Instant baseInstant, Optional<Long> extraDelayInMillisOnEveryTenEvents) {
+    public EventGenerator(int sleepMillisBetweenEvents, SerializableFunction<Long, T> generator, Instant baseInstant, SerializableOptional<Long> extraDelayInMillisOnEveryTenEvents) {
         this.sleepMillisBetweenEvents = sleepMillisBetweenEvents;
         this.generator = generator;
         this.baseInstant = baseInstant;

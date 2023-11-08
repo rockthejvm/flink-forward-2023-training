@@ -1,27 +1,28 @@
 package com.rockthejvm.shopping;
 
+import org.apache.flink.types.SerializableOptional;
+import org.apache.flink.util.function.SerializableFunction;
+import org.apache.flink.util.function.SerializableSupplier;
 import java.time.Instant;
 import java.util.List;
-import java.util.Optional;
 import java.util.Random;
 import java.util.UUID;
-import java.util.function.Function;
-import java.util.function.Supplier;
 
 public class SingleShoppingCartEventsGenerator extends EventGenerator<ShoppingCartEvent> {
   private int sleepMillisBetweenEvents;
   private Instant baseInstant;
-  private Optional<Long> extraDelayInMillisOnEveryTenEvents;
-  private Optional<String> sourceId;
+  private SerializableOptional<Long> extraDelayInMillisOnEveryTenEvents;
+  private SerializableOptional<String> sourceId;
   private boolean generateRemoved;
 
-  public SingleShoppingCartEventsGenerator(int sleepMillisBetweenEvents, Instant baseInstant, Optional<Long> extraDelayInMillisOnEveryTenEvents, Optional<String> sourceId, boolean generateRemoved) {
+  public SingleShoppingCartEventsGenerator(int sleepMillisBetweenEvents, Instant baseInstant, SerializableOptional<Long> extraDelayInMillisOnEveryTenEvents, SerializableOptional<String> sourceId, boolean generateRemoved) {
     super(
       sleepMillisBetweenEvents,
       eventGenerator(
         generateRemoved,
         () -> sourceId
           .map(id -> id + " " + UUID.randomUUID())
+          .toOptional()
           .orElse(UUID.randomUUID().toString()),
         baseInstant
       ),
@@ -46,7 +47,7 @@ public class SingleShoppingCartEventsGenerator extends EventGenerator<ShoppingCa
     return random.nextInt(10);
   }
 
-  private static Function<Long, ShoppingCartEvent> eventGenerator(boolean generateRemoved, Supplier<String> skuGen, Instant baseInstant) {
+  private static SerializableFunction<Long, ShoppingCartEvent> eventGenerator(boolean generateRemoved, SerializableSupplier<String> skuGen, Instant baseInstant) {
     return id -> {
       if (!generateRemoved || random.nextBoolean())
         return new AddToShoppingCartEvent(
